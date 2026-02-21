@@ -62,8 +62,15 @@ export class LobbyService {
   }
 
   async leaveLobby(playerId: string): Promise<{ lobby: LobbyDto | null; newHostId: string | null }> {
-    const player = await this.prisma.player.findUnique({ where: { id: playerId } });
+    const player = await this.prisma.player.findUnique({
+      where: { id: playerId },
+      include: { lobby: { select: { status: true } } },
+    });
     if (!player?.lobbyId) return { lobby: null, newHostId: null };
+
+    // Don't remove a player once the game has started — deleting would violate FK
+    // constraints from Move/Vote records and break the ongoing game.
+    if (player.lobby?.status !== LobbyStatus.WAITING) return { lobby: null, newHostId: null };
 
     await this.prisma.player.delete({ where: { id: playerId } });
 
@@ -131,6 +138,14 @@ export class LobbyService {
     });
 
     return this.toLobbyDto(updated!);
+  }
+
+  async getPlayerLobbyId(playerId: string): Promise<string | null> {
+    const player = await this.prisma.player.findUnique({
+      where: { id: playerId },
+      select: { lobbyId: true },
+    });
+    return player?.lobbyId ?? null;
   }
 
   async getLobby(code: string): Promise<LobbyDto | null> {

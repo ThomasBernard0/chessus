@@ -27,47 +27,80 @@ export class GameGateway {
     const playerId = socketToPlayer.get(client.id);
     if (!playerId) return { error: 'Not identified' };
 
-    // Find the player's lobby and validate they are the host
-    // The room the client is in (besides their own socket room) is the lobby id
-    const rooms = [...client.rooms].filter(r => r !== client.id);
-    const lobbyId = rooms[0];
+    const lobbyId = await this.lobbyService.getPlayerLobbyId(playerId);
     if (!lobbyId) return { error: 'Not in a lobby' };
 
-    await this.lobbyService.assignSeatsAndImposter(lobbyId);
-    const { gameId, activeSeatIndex } = await this.gameService.startGame(lobbyId);
+    try {
+      await this.lobbyService.assignSeatsAndImposter(lobbyId);
+      const { gameId } = await this.gameService.startGame(lobbyId);
+      const state = await this.gameService.getGameState(gameId);
 
-    const state = await this.gameService.getGameState(gameId);
-
-    // Tell each player their role privately
-    for (const player of state.lobby.players) {
-      const playerSocket = [...this.server.sockets.sockets.values()].find(
-        s => s.id === player.socketId,
-      );
-      if (playerSocket) {
-        playerSocket.join(gameId);
-        playerSocket.emit('game:yourRole', {
-          isImposter: player.isImposter,
-          team: player.team,
-          seatIndex: player.seatIndex,
-        });
+      // Join all players to the game room and send their role privately
+      for (const player of state.lobby.players) {
+        const playerSocket = [...this.server.sockets.sockets.values()].find(
+          s => s.id === player.socketId,
+        );
+        if (playerSocket) {
+          playerSocket.join(gameId);
+          playerSocket.emit('game:yourRole', {
+            isImposter: player.isImposter,
+            team: player.team,
+            seatIndex: player.seatIndex,
+          });
+        }
       }
+
+      // Emit game:started to lobby room AFTER all sockets have joined the game room.
+      // game:state is NOT emitted here — GamePage requests it on mount via game:requestState
+      // to avoid the race condition where GamePage hasn't mounted yet.
+      this.lobbyGateway.emitGameStarted(lobbyId, gameId);
+      return { gameId };
+    } catch (err: any) {
+      return { error: err?.message ?? 'Failed to start game' };
     }
+  }
 
-    this.lobbyGateway.emitGameStarted(lobbyId, gameId);
-    this.server.to(gameId).emit('game:state', {
-      gameId,
-      fen: state.fen,
-      moves: state.moves,
-      activeSeatIndex,
-      players: state.lobby.players.map(p => ({
-        id: p.id,
-        username: p.username,
-        team: p.team,
-        seatIndex: p.seatIndex,
-      })),
-    });
+  @SubscribeMessage('game:requestState')
+  async handleRequestState(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { gameId: string },
+  ) {
+    try {
+      const state = await this.gameService.getGameState(data.gameId);
+      const activeSeatIndex = state.moves.length % 4;
 
-    return { gameId };
+      const gameState = {
+        gameId: state.id,
+        fen: state.fen,
+        moves: state.moves.map(m => ({ from: m.from, to: m.to, san: m.san })),
+        activeSeatIndex,
+        players: state.lobby.players.map(p => ({
+          id: p.id,
+          username: p.username,
+          team: p.team,
+          seatIndex: p.seatIndex,
+        })),
+      };
+
+      // Ensure this socket is in the game room
+      client.join(data.gameId);
+      client.emit('game:state', gameState);
+
+      // Re-emit role so GamePage always has it (handles missed game:yourRole during navigation)
+      const playerId = this.lobbyGateway.getSocketToPlayer().get(client.id);
+      if (playerId) {
+        const player = state.lobby.players.find(p => p.id === playerId);
+        if (player) {
+          client.emit('game:yourRole', {
+            isImposter: player.isImposter,
+            team: player.team,
+            seatIndex: player.seatIndex,
+          });
+        }
+      }
+    } catch {
+      client.emit('game:error', { message: 'Game not found' });
+    }
   }
 
   @SubscribeMessage('game:move')

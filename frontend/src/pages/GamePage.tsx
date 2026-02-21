@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Chessboard } from 'react-chessboard';
 import { Chess } from 'chess.js';
+import type { Square } from 'chess.js';
 import { getSocket } from '../lib/socket';
 import { useGameStore } from '../store/gameStore';
 import { Team } from '../types';
@@ -12,16 +13,24 @@ const SEAT_LABEL = ['A1', 'B1', 'A2', 'B2'];
 export default function GamePage() {
   const { gameId } = useParams<{ gameId: string }>();
   const navigate = useNavigate();
-  const { game, myRole, playerId, setGame, updateFen, setVoteResult, voteResult } = useGameStore();
+  const { game, myRole, playerId, setGame, updateFen, setVoteResult, setMyRole, voteResult, reset } = useGameStore();
 
   const [chess] = useState(() => new Chess());
   const [phase, setPhase] = useState<'playing' | 'voting' | 'finished'>('playing');
   const [winner, setWinner] = useState<Team | null>(null);
   const [selectedSuspect, setSelectedSuspect] = useState<string | null>(null);
   const [hasVoted, setHasVoted] = useState(false);
+  const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
+  const [validMoveSquares, setValidMoveSquares] = useState<string[]>([]);
 
   useEffect(() => {
     const socket = getSocket();
+
+    if (gameId) {
+      socket.emit('game:requestState', { gameId });
+    }
+
+    socket.on('game:yourRole', setMyRole);
 
     socket.on('game:state', (state: GameState) => {
       setGame(state);
@@ -31,6 +40,8 @@ export default function GamePage() {
     socket.on('game:moved', (result: MoveResult) => {
       chess.load(result.fen);
       updateFen(result.fen, result.currentTurn % 4, result.currentTurn);
+      setSelectedSquare(null);
+      setValidMoveSquares([]);
     });
 
     socket.on('game:votingStarted', ({ winner: w }: { winner: Team }) => {
@@ -48,6 +59,7 @@ export default function GamePage() {
     });
 
     return () => {
+      socket.off('game:yourRole');
       socket.off('game:state');
       socket.off('game:moved');
       socket.off('game:votingStarted');
@@ -56,17 +68,32 @@ export default function GamePage() {
     };
   }, []);
 
-  function onDrop(sourceSquare: string, targetSquare: string): boolean {
+  // Returns the square of the king currently in check, or null.
+  function getCheckSquare(): string | null {
+    if (!chess.inCheck()) return null;
+    const board = chess.board();
+    const activeColor = chess.turn();
+    for (let rank = 0; rank < 8; rank++) {
+      for (let file = 0; file < 8; file++) {
+        const piece = board[rank][file];
+        if (piece?.type === 'k' && piece.color === activeColor) {
+          return `${'abcdefgh'[file]}${8 - rank}`;
+        }
+      }
+    }
+    return null;
+  }
+
+  // Core move logic shared by drag-drop and click-to-move.
+  function makeMove(from: string, to: string): boolean {
     if (!game || !myRole || !gameId) return false;
 
-    const activeSeatIndex = game.activeSeatIndex;
-    const activePlayer = game.players.find(p => p.seatIndex === activeSeatIndex);
+    const activePlayer = game.players.find(p => p.seatIndex === game.activeSeatIndex);
     if (!activePlayer || activePlayer.id !== playerId) return false;
 
-    // chess.js validates the move
     let move: ReturnType<Chess['move']> | null = null;
     try {
-      move = chess.move({ from: sourceSquare, to: targetSquare, promotion: 'q' });
+      move = chess.move({ from, to, promotion: 'q' });
     } catch {
       return false;
     }
@@ -74,13 +101,58 @@ export default function GamePage() {
 
     getSocket().emit('game:move', {
       gameId,
-      from: sourceSquare,
-      to: targetSquare,
+      from,
+      to,
       san: move.san,
       fen: chess.fen(),
+      promotion: move.promotion,
     });
 
+    // Detect checkmate — winner is the side that is NOT to move next (they were mated).
+    if (chess.isCheckmate()) {
+      const checkmateWinner = chess.turn() === 'b' ? Team.A : Team.B;
+      getSocket().emit('game:endGame', { gameId, winner: checkmateWinner });
+    }
+
     return true;
+  }
+
+  function onDrop({ sourceSquare, targetSquare }: { sourceSquare: string; targetSquare: string | null }): boolean {
+    if (!targetSquare) return false;
+    const result = makeMove(sourceSquare, targetSquare);
+    if (result) {
+      setSelectedSquare(null);
+      setValidMoveSquares([]);
+    }
+    return result;
+  }
+
+  function onSquareClick({ square }: { square: string; [k: string]: unknown }) {
+    if (!game || phase !== 'playing') return;
+
+    const activePlayer = game.players.find(p => p.seatIndex === game.activeSeatIndex);
+    if (activePlayer?.id !== playerId) return;
+
+    // Clicking on a valid target while a piece is selected → make the move.
+    if (selectedSquare && validMoveSquares.includes(square)) {
+      makeMove(selectedSquare, square);
+      setSelectedSquare(null);
+      setValidMoveSquares([]);
+      return;
+    }
+
+    // Clicking on a piece that belongs to the active color → select it.
+    const piece = chess.get(square as Square);
+    if (piece && piece.color === chess.turn()) {
+      setSelectedSquare(square);
+      const moves = chess.moves({ square: square as Square, verbose: true });
+      setValidMoveSquares(moves.map(m => m.to));
+      return;
+    }
+
+    // Anything else → deselect.
+    setSelectedSquare(null);
+    setValidMoveSquares([]);
   }
 
   function handleVote() {
@@ -103,6 +175,22 @@ export default function GamePage() {
   const activePlayer = game.players.find(p => p.seatIndex === game.activeSeatIndex);
   const isMyTurn = activePlayer?.id === playerId;
 
+  // Build square highlight styles.
+  const squareStyles: Record<string, object> = {};
+  for (const sq of validMoveSquares) {
+    const hasPiece = !!chess.get(sq as Square);
+    squareStyles[sq] = hasPiece
+      ? { background: 'radial-gradient(circle, transparent 58%, rgba(0,0,0,.25) 58%)', borderRadius: '50%' }
+      : { background: 'radial-gradient(circle, rgba(0,0,0,.18) 25%, transparent 25%)' };
+  }
+  if (selectedSquare) {
+    squareStyles[selectedSquare] = { backgroundColor: 'rgba(255, 213, 0, 0.5)' };
+  }
+  const checkSquare = getCheckSquare();
+  if (checkSquare) {
+    squareStyles[checkSquare] = { backgroundColor: 'rgba(220, 30, 30, 0.55)' };
+  }
+
   return (
     <div className="min-h-screen bg-gray-950 text-white flex flex-col items-center justify-center gap-6 p-4">
       {myRole && (
@@ -122,10 +210,14 @@ export default function GamePage() {
 
           <div className="w-full max-w-[min(80vh,600px)]">
             <Chessboard
-              position={game.fen}
-              onPieceDrop={onDrop}
-              arePiecesDraggable={isMyTurn}
-              boardOrientation={myRole?.team === Team.B ? 'black' : 'white'}
+              options={{
+                position: game.fen,
+                onPieceDrop: onDrop,
+                onSquareClick,
+                allowDragging: isMyTurn,
+                boardOrientation: myRole?.team === Team.B ? 'black' : 'white',
+                squareStyles,
+              }}
             />
           </div>
 
@@ -186,7 +278,7 @@ export default function GamePage() {
           ) : (
             <p className="text-gray-300">Tie vote — imposter escaped!</p>
           )}
-          <button onClick={() => navigate('/')} className="bg-amber-400 hover:bg-amber-300 text-gray-950 font-semibold rounded-lg py-3 transition">
+          <button onClick={() => { reset(); navigate('/'); }} className="bg-amber-400 hover:bg-amber-300 text-gray-950 font-semibold rounded-lg py-3 transition">
             Back to Home
           </button>
         </div>

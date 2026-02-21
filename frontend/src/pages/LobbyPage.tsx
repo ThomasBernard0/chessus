@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getSocket } from '../lib/socket';
 import { useGameStore } from '../store/gameStore';
@@ -11,7 +11,8 @@ const TEAM_COLOR: Record<Team, string> = { A: 'bg-white text-gray-900', B: 'bg-g
 export default function LobbyPage() {
   const { code } = useParams<{ code: string }>();
   const navigate = useNavigate();
-  const { lobby, playerId, setLobby, setGame, setMyRole } = useGameStore();
+  const { lobby, playerId, setLobby, setMyRole } = useGameStore();
+  const [startError, setStartError] = useState('');
 
   useEffect(() => {
     const socket = getSocket();
@@ -59,7 +60,10 @@ export default function LobbyPage() {
   }
 
   function handleStart() {
-    getSocket().emit('game:start');
+    setStartError('');
+    getSocket().emit('game:start', {}, (res: { gameId?: string; error?: string }) => {
+      if (res?.error) setStartError(res.error);
+    });
   }
 
   function handleLeave() {
@@ -141,13 +145,16 @@ export default function LobbyPage() {
         )}
 
         {isHost && (
-          <button
-            onClick={handleStart}
-            disabled={!canStart}
-            className="bg-amber-400 hover:bg-amber-300 text-gray-950 font-semibold rounded-lg py-3 transition disabled:opacity-40 mt-2"
-          >
-            {canStart ? 'Start Game' : 'Need 2 players on each team'}
-          </button>
+          <>
+            <button
+              onClick={handleStart}
+              disabled={!canStart}
+              className="bg-amber-400 hover:bg-amber-300 text-gray-950 font-semibold rounded-lg py-3 transition disabled:opacity-40 mt-2"
+            >
+              {canStart ? 'Start Game' : 'Need 2 players on each team'}
+            </button>
+            {startError && <p className="text-red-400 text-sm text-center">{startError}</p>}
+          </>
         )}
 
         <button onClick={handleLeave} className="text-gray-500 hover:text-gray-300 text-sm transition">
