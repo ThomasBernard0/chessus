@@ -1,0 +1,158 @@
+import { useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { getSocket } from '../lib/socket';
+import { useGameStore } from '../store/gameStore';
+import { LobbyDto, Team } from '../types';
+
+const TEAM_LABEL: Record<Team, string> = { A: 'Team A (White)', B: 'Team B (Black)' };
+const TEAM_COLOR: Record<Team, string> = { A: 'bg-white text-gray-900', B: 'bg-gray-800 text-white' };
+
+export default function LobbyPage() {
+  const { code } = useParams<{ code: string }>();
+  const navigate = useNavigate();
+  const { lobby, playerId, setLobby, setGame, setMyRole } = useGameStore();
+
+  useEffect(() => {
+    const socket = getSocket();
+
+    socket.on('lobby:updated', (updated: LobbyDto) => setLobby(updated));
+    socket.on('lobby:kicked', () => {
+      setLobby(null);
+      navigate('/');
+    });
+    socket.on('game:started', ({ gameId }: { gameId: string }) => {
+      navigate(`/game/${gameId}`);
+    });
+    socket.on('game:yourRole', (role: { isImposter: boolean; team: Team; seatIndex: number }) => {
+      setMyRole(role);
+    });
+
+    return () => {
+      socket.off('lobby:updated');
+      socket.off('lobby:kicked');
+      socket.off('game:started');
+      socket.off('game:yourRole');
+    };
+  }, []);
+
+  if (!lobby) {
+    return (
+      <div className="min-h-screen bg-gray-950 flex items-center justify-center text-white">
+        Lobby not found. <button onClick={() => navigate('/')} className="ml-2 underline">Go home</button>
+      </div>
+    );
+  }
+
+  const isHost = lobby.hostId === playerId;
+  const myPlayer = lobby.players.find(p => p.id === playerId);
+  const canStart = isHost && lobby.players.length === 4 &&
+    lobby.players.filter(p => p.team === Team.A).length === 2 &&
+    lobby.players.filter(p => p.team === Team.B).length === 2;
+
+  function handleChangeTeam(team: Team) {
+    getSocket().emit('lobby:changeTeam', { team });
+  }
+
+  function handleKick(targetId: string) {
+    getSocket().emit('lobby:kick', { targetPlayerId: targetId });
+  }
+
+  function handleStart() {
+    getSocket().emit('game:start');
+  }
+
+  function handleLeave() {
+    getSocket().emit('lobby:leave');
+    setLobby(null);
+    navigate('/');
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-950 text-white flex flex-col items-center justify-center gap-6 p-6">
+      <div className="text-center">
+        <h1 className="text-3xl font-bold text-amber-400">Lobby</h1>
+        <p className="text-gray-400 mt-1">
+          Code: <span className="font-mono text-white tracking-widest text-xl">{lobby.code}</span>
+        </p>
+      </div>
+
+      <div className="bg-gray-900 rounded-2xl p-6 w-full max-w-md flex flex-col gap-4 shadow-xl">
+        <p className="text-gray-400 text-sm">{lobby.players.length}/4 players</p>
+
+        {[Team.A, Team.B].map(team => (
+          <div key={team}>
+            <h3 className="text-sm font-semibold text-gray-400 mb-2">{TEAM_LABEL[team]}</h3>
+            <div className="flex flex-col gap-2">
+              {lobby.players
+                .filter(p => p.team === team)
+                .map(p => (
+                  <div key={p.id} className={`flex items-center justify-between rounded-lg px-4 py-2 ${TEAM_COLOR[team]}`}>
+                    <span className="font-medium">
+                      {p.username}
+                      {p.isHost && <span className="ml-2 text-xs text-amber-500">(host)</span>}
+                      {p.id === playerId && <span className="ml-2 text-xs text-green-400">(you)</span>}
+                    </span>
+                    {isHost && p.id !== playerId && (
+                      <button
+                        onClick={() => handleKick(p.id)}
+                        className="text-red-400 hover:text-red-300 text-xs transition"
+                      >
+                        Kick
+                      </button>
+                    )}
+                  </div>
+                ))}
+            </div>
+          </div>
+        ))}
+
+        {lobby.players.filter(p => !p.team).length > 0 && (
+          <div>
+            <h3 className="text-sm font-semibold text-gray-400 mb-2">Unassigned</h3>
+            {lobby.players
+              .filter(p => !p.team)
+              .map(p => (
+                <div key={p.id} className="flex items-center justify-between rounded-lg px-4 py-2 bg-gray-800">
+                  <span>{p.username}{p.id === playerId && <span className="ml-2 text-xs text-green-400">(you)</span>}</span>
+                </div>
+              ))}
+          </div>
+        )}
+
+        {/* Team switcher for self */}
+        {myPlayer && (
+          <div className="flex gap-2 pt-2">
+            <button
+              onClick={() => handleChangeTeam(Team.A)}
+              disabled={myPlayer.team === Team.A}
+              className="flex-1 bg-gray-700 hover:bg-white hover:text-gray-900 rounded-lg py-2 text-sm transition disabled:opacity-40"
+            >
+              Join Team A
+            </button>
+            <button
+              onClick={() => handleChangeTeam(Team.B)}
+              disabled={myPlayer.team === Team.B}
+              className="flex-1 bg-gray-700 hover:bg-gray-600 rounded-lg py-2 text-sm transition disabled:opacity-40"
+            >
+              Join Team B
+            </button>
+          </div>
+        )}
+
+        {isHost && (
+          <button
+            onClick={handleStart}
+            disabled={!canStart}
+            className="bg-amber-400 hover:bg-amber-300 text-gray-950 font-semibold rounded-lg py-3 transition disabled:opacity-40 mt-2"
+          >
+            {canStart ? 'Start Game' : 'Need 2 players on each team'}
+          </button>
+        )}
+
+        <button onClick={handleLeave} className="text-gray-500 hover:text-gray-300 text-sm transition">
+          Leave lobby
+        </button>
+      </div>
+    </div>
+  );
+}
