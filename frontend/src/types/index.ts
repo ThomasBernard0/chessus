@@ -4,12 +4,6 @@ export enum LobbyStatus {
   FINISHED = 'FINISHED',
 }
 
-export enum GameStatus {
-  IN_PROGRESS = 'IN_PROGRESS',
-  VOTING = 'VOTING',
-  FINISHED = 'FINISHED',
-}
-
 export enum Team {
   A = 'A',
   B = 'B',

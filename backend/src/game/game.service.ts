@@ -2,7 +2,7 @@ import { Injectable, NotFoundException, ForbiddenException, BadRequestException 
 import { PrismaService } from '../prisma/prisma.service';
 import { GameStatus, Team } from '../shared/types';
 
-export interface MoveResult {
+interface MoveResult {
   fen: string;
   san: string;
   from: string;
@@ -14,7 +14,7 @@ export interface MoveResult {
   winner: Team | null;
 }
 
-export interface VoteResult {
+interface VoteResult {
   votes: { voterId: string; suspectId: string }[];
   totalPlayers: number;
   isVotingComplete: boolean;

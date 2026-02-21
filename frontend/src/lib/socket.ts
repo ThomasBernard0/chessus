@@ -17,6 +17,3 @@ export function connectSocket(): Socket {
   return s;
 }
 
-export function disconnectSocket(): void {
-  socket?.disconnect();
-}
