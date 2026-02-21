@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { connectSocket } from '../lib/socket';
 import { useGameStore } from '../store/gameStore';
-import { LobbyDto } from '../types';
+import type { LobbyDto } from '../types';
 
 export default function HomePage() {
   const navigate = useNavigate();

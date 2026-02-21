@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { LobbyDto, GameState, MyRole, VoteResult } from '../types';
+import type { LobbyDto, GameState, MyRole, VoteResult } from '../types';
 
 interface GameStore {
   // Identity

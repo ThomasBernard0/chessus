@@ -4,7 +4,8 @@ import { Chessboard } from 'react-chessboard';
 import { Chess } from 'chess.js';
 import { getSocket } from '../lib/socket';
 import { useGameStore } from '../store/gameStore';
-import { GameState, MoveResult, Team, VoteResult } from '../types';
+import { Team } from '../types';
+import type { GameState, MoveResult, VoteResult } from '../types';
 
 const SEAT_LABEL = ['A1', 'B1', 'A2', 'B2'];
 

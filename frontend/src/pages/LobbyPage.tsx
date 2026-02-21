@@ -2,7 +2,8 @@ import { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getSocket } from '../lib/socket';
 import { useGameStore } from '../store/gameStore';
-import { LobbyDto, Team } from '../types';
+import { Team } from '../types';
+import type { LobbyDto } from '../types';
 
 const TEAM_LABEL: Record<Team, string> = { A: 'Team A (White)', B: 'Team B (Black)' };
 const TEAM_COLOR: Record<Team, string> = { A: 'bg-white text-gray-900', B: 'bg-gray-800 text-white' };
