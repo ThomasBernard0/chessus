@@ -1,13 +1,15 @@
-export enum LobbyStatus {
-  WAITING = 'WAITING',
-  IN_PROGRESS = 'IN_PROGRESS',
-  FINISHED = 'FINISHED',
-}
+export type LobbyStatus = 'WAITING' | 'IN_PROGRESS' | 'FINISHED';
+export const LobbyStatus = {
+  WAITING: 'WAITING' as LobbyStatus,
+  IN_PROGRESS: 'IN_PROGRESS' as LobbyStatus,
+  FINISHED: 'FINISHED' as LobbyStatus,
+};
 
-export enum Team {
-  A = 'A',
-  B = 'B',
-}
+export type Team = 'A' | 'B';
+export const Team = {
+  A: 'A' as Team,
+  B: 'B' as Team,
+};
 
 export interface PlayerDto {
   id: string;

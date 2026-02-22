@@ -9,7 +9,7 @@ const TEAM_LABEL: Record<Team, string> = { A: 'Team A', B: 'Team B' };
 const TEAM_COLOR: Record<Team, string> = { A: 'bg-white text-gray-900', B: 'bg-gray-800 text-white' };
 
 export default function LobbyPage() {
-  const { code } = useParams<{ code: string }>();
+  const { code: _code } = useParams<{ code: string }>();
   const navigate = useNavigate();
   const { lobby, playerId, setLobby, setMyRole } = useGameStore();
   const [startError, setStartError] = useState('');
