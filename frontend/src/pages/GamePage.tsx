@@ -178,7 +178,10 @@ export default function GamePage() {
 
     // Detect checkmate — winner is the side that is NOT to move next (they were mated).
     if (chess.isCheckmate()) {
-      const checkmateWinner = chess.turn() === 'b' ? Team.A : Team.B;
+      // White players are in even seats; determine their team from game state.
+      const whiteTeam = game.players.find(p => p.seatIndex === 0)?.team ?? Team.A;
+      const blackTeam = whiteTeam === Team.A ? Team.B : Team.A;
+      const checkmateWinner = chess.turn() === 'b' ? whiteTeam : blackTeam;
       getSocket().emit('game:endGame', { gameId, winner: checkmateWinner });
     }
 
@@ -280,7 +283,7 @@ export default function GamePage() {
           <div className="w-full max-w-[min(80vh,600px)] flex flex-col gap-1">
             {(() => {
               const { capturedByWhite, capturedByBlack, advantage } = computeCaptures(game.fen);
-              const isBlack = myRole?.team === Team.B;
+              const isBlack = myRole != null && myRole.seatIndex % 2 === 1;
               const whiteRow = <CapturedPiecesRow captured={capturedByWhite} pieceColor="b" advantage={advantage > 0 ? advantage : 0} />;
               const blackRow = <CapturedPiecesRow captured={capturedByBlack} pieceColor="w" advantage={advantage < 0 ? -advantage : 0} />;
               return (

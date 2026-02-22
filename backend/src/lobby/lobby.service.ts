@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { LobbyDto, PlayerDto, LobbyStatus, Team, SEAT_TO_TEAM } from '../shared/types';
+import { LobbyDto, PlayerDto, LobbyStatus, Team } from '../shared/types';
 
 function generateCode(): string {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -118,7 +118,7 @@ export class LobbyService {
     if (!lobby) throw new NotFoundException('Lobby not found');
 
     const teamCount = lobby.players.filter(p => p.id !== playerId && p.team === team).length;
-    if (teamCount >= 2) throw new BadRequestException('Team is full (max 2 players)');
+    if (teamCount >= 3) throw new BadRequestException('Team is full (max 3 players)');
 
     await this.prisma.player.update({ where: { id: playerId }, data: { team } });
 
@@ -277,12 +277,16 @@ export class LobbyService {
     const teamB = lobby.players.filter(p => p.team === Team.B);
     if (teamA.length !== 2 || teamB.length !== 2) throw new BadRequestException('Each team must have exactly 2 players');
 
-    // Assign seats: A1=0, B1=1, A2=2, B2=3
+    // Randomly assign which team plays White (even seats) vs Black (odd seats)
+    const teamAIsWhite = Math.random() < 0.5;
+    const whiteTeam = teamAIsWhite ? teamA : teamB;
+    const blackTeam = teamAIsWhite ? teamB : teamA;
+
     const assignments = [
-      { id: teamA[0].id, seatIndex: 0 },
-      { id: teamB[0].id, seatIndex: 1 },
-      { id: teamA[1].id, seatIndex: 2 },
-      { id: teamB[1].id, seatIndex: 3 },
+      { id: whiteTeam[0].id, seatIndex: 0 },
+      { id: blackTeam[0].id, seatIndex: 1 },
+      { id: whiteTeam[1].id, seatIndex: 2 },
+      { id: blackTeam[1].id, seatIndex: 3 },
     ];
 
     // Pick one random imposter
