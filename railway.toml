@@ -1,10 +1,10 @@
 [build]
 builder = "nixpacks"
-buildCommand = "npm install && npm run build --workspace=backend && npm run build --workspace=frontend"
+buildCommand = "npx prisma generate --schema=backend/prisma/schema.prisma && npm run build --workspace=backend && npm run build --workspace=frontend"
 
 [deploy]
 startCommand = "npx prisma migrate deploy --schema=backend/prisma/schema.prisma && node backend/dist/main.js"
 healthcheckPath = "/"
-healthcheckTimeout = 30
+healthcheckTimeout = 120
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
