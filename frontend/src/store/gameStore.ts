@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { LobbyDto, GameState, MyRole, VoteResult } from '../types';
+import type { LobbyDto, GameState, MyRole, VoteResult, PointAward } from '../types';
 
 interface GameStore {
   // Identity
@@ -13,6 +13,7 @@ interface GameStore {
   game: GameState | null;
   myRole: MyRole | null;
   voteResult: VoteResult | null;
+  pointsAwarded: PointAward[] | null;
 
   // Reconnect navigation
   pendingGameId: string | null;
@@ -24,6 +25,7 @@ interface GameStore {
   setMyRole: (role: MyRole) => void;
   updateFen: (fen: string, activeSeatIndex: number, moveCount: number) => void;
   setVoteResult: (result: VoteResult) => void;
+  setPointsAwarded: (awards: PointAward[]) => void;
   setPendingGameId: (gameId: string | null) => void;
   reset: () => void;
 }
@@ -35,6 +37,7 @@ export const useGameStore = create<GameStore>((set) => ({
   game: null,
   myRole: null,
   voteResult: null,
+  pointsAwarded: null,
   pendingGameId: null,
 
   setIdentity: (playerId, username) => set({ playerId, username }),
@@ -46,6 +49,7 @@ export const useGameStore = create<GameStore>((set) => ({
       game: state.game ? { ...state.game, fen, activeSeatIndex } : null,
     })),
   setVoteResult: (voteResult) => set({ voteResult }),
+  setPointsAwarded: (pointsAwarded) => set({ pointsAwarded }),
   setPendingGameId: (pendingGameId) => set({ pendingGameId }),
-  reset: () => set({ lobby: null, game: null, myRole: null, voteResult: null, pendingGameId: null }),
+  reset: () => set({ lobby: null, game: null, myRole: null, voteResult: null, pointsAwarded: null, pendingGameId: null }),
 }));

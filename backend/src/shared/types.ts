@@ -35,6 +35,13 @@ export interface PlayerDto {
   seatIndex: number | null;
   isHost: boolean;
   isOnline: boolean;
+  points: number;
+}
+
+export interface PointAward {
+  playerId: string;
+  username: string;
+  pointsEarned: number;
 }
 
 export interface LobbyDto {

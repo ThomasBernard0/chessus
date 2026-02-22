@@ -165,6 +165,26 @@ export default function LobbyPage() {
           Leave lobby
         </button>
       </div>
+
+      {/* Leaderboard */}
+      <div className="bg-gray-900 rounded-2xl p-6 w-full max-w-md flex flex-col gap-3 shadow-xl">
+        <h2 className="text-sm font-semibold text-gray-400">Leaderboard</h2>
+        {[...lobby.players]
+          .sort((a, b) => b.points - a.points)
+          .map((p, i) => (
+            <div
+              key={p.id}
+              className={`flex items-center gap-3 rounded-lg px-4 py-2 ${p.id === playerId ? 'bg-amber-400/10 border border-amber-400/30' : 'bg-gray-800'}`}
+            >
+              <span className="text-gray-500 text-sm w-4">{i + 1}</span>
+              <span className="flex-1 text-sm">
+                {p.username}
+                {p.id === playerId && <span className="ml-2 text-xs text-green-400">(you)</span>}
+              </span>
+              <span className="font-bold text-amber-400">{p.points} pts</span>
+            </div>
+          ))}
+      </div>
     </div>
   );
 }

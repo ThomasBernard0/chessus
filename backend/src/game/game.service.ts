@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { GameStatus, Team } from '../shared/types';
+import { GameStatus, PointAward, Team } from '../shared/types';
 
 export interface MoveResult {
   fen: string;
@@ -148,5 +148,55 @@ export class GameService {
       eliminatedPlayerId,
       wasImposterFound,
     };
+  }
+
+  async awardPoints(gameId: string): Promise<PointAward[]> {
+    const game = await this.prisma.game.findUnique({
+      where: { id: gameId },
+      include: {
+        lobby: { include: { players: true } },
+        votes: true,
+      },
+    });
+    if (!game) throw new NotFoundException('Game not found');
+
+    const players = game.lobby.players;
+    const imposter = players.find(p => p.isImposter);
+    const correctVoteCount = imposter ? game.votes.filter(v => v.suspectId === imposter.id).length : 0;
+
+    const awards: PointAward[] = [];
+
+    for (const player of players) {
+      let earned = 0;
+
+      // +1 if non-imposter and their team won the chess game
+      if (!player.isImposter && game.winner && player.team === game.winner) {
+        earned += 1;
+      }
+
+      // +1 if they voted for the correct imposter
+      if (imposter) {
+        const theirVote = game.votes.find(v => v.voterId === player.id);
+        if (theirVote && theirVote.suspectId === imposter.id) {
+          earned += 1;
+        }
+      }
+
+      // +3 if they were the imposter and ≤1 person correctly identified them
+      if (player.isImposter && correctVoteCount <= 1) {
+        earned += 3;
+      }
+
+      if (earned > 0) {
+        await this.prisma.player.update({
+          where: { id: player.id },
+          data: { points: { increment: earned } },
+        });
+      }
+
+      awards.push({ playerId: player.id, username: player.username, pointsEarned: earned });
+    }
+
+    return awards;
   }
 }

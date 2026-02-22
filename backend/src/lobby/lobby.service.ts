@@ -6,7 +6,7 @@ function generateCode(): string {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
 }
 
-function toPlayerDto(p: { id: string; username: string; socketId: string | null; team: string | null; seatIndex: number | null; isHost: boolean }): PlayerDto {
+function toPlayerDto(p: { id: string; username: string; socketId: string | null; team: string | null; seatIndex: number | null; isHost: boolean; points: number }): PlayerDto {
   return {
     id: p.id,
     username: p.username,
@@ -14,6 +14,7 @@ function toPlayerDto(p: { id: string; username: string; socketId: string | null;
     seatIndex: p.seatIndex,
     isHost: p.isHost,
     isOnline: p.socketId !== null,
+    points: p.points,
   };
 }
 

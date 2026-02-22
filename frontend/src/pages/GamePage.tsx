@@ -6,7 +6,7 @@ import type { Square } from 'chess.js';
 import { getSocket, clearIdentity } from '../lib/socket';
 import { useGameStore } from '../store/gameStore';
 import { Team } from '../types';
-import type { GameState, MoveResult, VoteResult, LobbyDto } from '../types';
+import type { GameState, MoveResult, VoteResult, PointAward, LobbyDto } from '../types';
 
 const SEAT_LABEL = ['A1', 'B1', 'A2', 'B2'];
 
@@ -72,7 +72,7 @@ function CapturedPiecesRow({
 export default function GamePage() {
   const { gameId } = useParams<{ gameId: string }>();
   const navigate = useNavigate();
-  const { game, myRole, playerId, setGame, updateFen, setVoteResult, setMyRole, voteResult, reset, setLobby } = useGameStore();
+  const { game, myRole, playerId, setGame, updateFen, setVoteResult, setPointsAwarded, setMyRole, voteResult, pointsAwarded, reset, setLobby } = useGameStore();
 
   const [chess] = useState(() => new Chess());
   const [phase, setPhase] = useState<'playing' | 'voting' | 'finished'>('playing');
@@ -114,8 +114,9 @@ export default function GamePage() {
       setVoteResult(result);
     });
 
-    socket.on('game:finished', (result: VoteResult) => {
+    socket.on('game:finished', (result: VoteResult & { pointsAwarded: PointAward[] }) => {
       setVoteResult(result);
+      setPointsAwarded(result.pointsAwarded);
       setPhase('finished');
     });
 
@@ -364,6 +365,22 @@ export default function GamePage() {
           ) : (
             <p className="text-gray-300">Tie vote — imposter escaped!</p>
           )}
+
+          {pointsAwarded && pointsAwarded.length > 0 && (
+            <div className="bg-gray-800 rounded-xl p-4 flex flex-col gap-2 text-left">
+              <p className="text-sm font-semibold text-gray-400 text-center">Points earned this round</p>
+              {pointsAwarded.map(award => (
+                <div
+                  key={award.playerId}
+                  className={`flex justify-between items-center text-sm rounded-lg px-3 py-1.5 ${award.playerId === playerId ? 'bg-amber-400/20 text-amber-300' : 'text-gray-300'}`}
+                >
+                  <span>{award.username}{award.playerId === playerId ? ' (you)' : ''}</span>
+                  <span className="font-bold">{award.pointsEarned > 0 ? `+${award.pointsEarned}` : '—'}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
           <button onClick={() => getSocket().emit('game:returnToLobby', { gameId })} className="bg-amber-400 hover:bg-amber-300 text-gray-950 font-semibold rounded-lg py-3 transition">
             Return to Lobby
           </button>

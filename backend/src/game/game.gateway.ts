@@ -148,7 +148,8 @@ export class GameGateway {
     this.server.to(data.gameId).emit('game:voteUpdate', result);
 
     if (result.isVotingComplete) {
-      this.server.to(data.gameId).emit('game:finished', result);
+      const pointsAwarded = await this.gameService.awardPoints(data.gameId);
+      this.server.to(data.gameId).emit('game:finished', { ...result, pointsAwarded });
     }
 
     return result;

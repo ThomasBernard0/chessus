@@ -27,6 +27,7 @@ model Player {
   seatIndex     Int? // 0-3 determines turn order within a team
   isHost        Boolean  @default(false)
   isImposter    Boolean  @default(false)
+  points        Int      @default(0)
   createdAt     DateTime @default(now())
   lobby         Lobby?   @relation(fields: [lobbyId], references: [id])
   movesPlayed   Move[]
