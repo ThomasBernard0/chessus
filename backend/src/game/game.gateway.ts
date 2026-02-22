@@ -69,9 +69,13 @@ export class GameGateway {
       const state = await this.gameService.getGameState(data.gameId);
       const activeSeatIndex = state.moves.length % 4;
 
+      const currentFen = state.moves.length > 0
+        ? state.moves[state.moves.length - 1].fen
+        : state.fen;
+
       const gameState = {
         gameId: state.id,
-        fen: state.fen,
+        fen: currentFen,
         moves: state.moves.map(m => ({ from: m.from, to: m.to, san: m.san })),
         activeSeatIndex,
         players: state.lobby.players.map(p => ({

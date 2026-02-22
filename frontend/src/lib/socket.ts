@@ -55,6 +55,9 @@ export function getSocket(): Socket {
 
           if (res.gameId) {
             store.setPendingGameId(res.gameId);
+            // Request game state now that identification is complete, so the
+            // backend can resolve our role from socketToPlayer without a race.
+            socket!.emit('game:requestState', { gameId: res.gameId });
           } else if (res.lobby) {
             store.setLobby(res.lobby);
           }

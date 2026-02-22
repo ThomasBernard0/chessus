@@ -85,7 +85,9 @@ export default function GamePage() {
   useEffect(() => {
     const socket = getSocket();
 
-    if (gameId) {
+    // Only request state immediately if already connected+identified (normal navigation).
+    // On page reload the socket isn't connected yet; socket.ts emits this after identify completes.
+    if (gameId && socket.connected) {
       socket.emit('game:requestState', { gameId });
     }
 
