@@ -320,8 +320,9 @@ export default function GamePage() {
             {game.players.filter(p => p.id !== playerId).map(p => (
               <button
                 key={p.id}
-                onClick={() => setSelectedSuspect(p.id)}
-                className={`rounded-lg px-4 py-3 text-left transition ${selectedSuspect === p.id ? 'bg-amber-400 text-gray-950' : 'bg-gray-800 hover:bg-gray-700'}`}
+                onClick={() => !hasVoted && setSelectedSuspect(p.id)}
+                disabled={hasVoted}
+                className={`rounded-lg px-4 py-3 text-left transition ${selectedSuspect === p.id ? 'bg-amber-400 text-gray-950' : 'bg-gray-800 hover:bg-gray-700'} disabled:cursor-default disabled:opacity-70`}
               >
                 {p.username}
               </button>
@@ -357,8 +358,12 @@ export default function GamePage() {
                 The most-voted player was{' '}
                 <strong>{game.players.find(p => p.id === voteResult.eliminatedPlayerId)?.username}</strong>.
               </p>
-              <p className={`text-2xl font-bold ${voteResult.wasImposterFound ? 'text-green-400' : 'text-red-400'}`}>
-                {voteResult.wasImposterFound ? 'Imposter found!' : 'Wrong! The imposter escaped.'}
+              <p className={`text-2xl font-bold ${voteResult.wasImposterFound ? 'text-green-400' : myRole?.isImposter && voteResult.imposterPlayerId === playerId ? 'text-amber-400' : 'text-red-400'}`}>
+                {voteResult.wasImposterFound
+                  ? 'Imposter found!'
+                  : myRole?.isImposter && voteResult.imposterPlayerId === playerId
+                    ? 'You escaped! You win!'
+                    : 'Wrong! The imposter escaped.'}
               </p>
               {!voteResult.wasImposterFound && voteResult.imposterPlayerId && (
                 <p className="text-gray-400 text-sm">
@@ -368,7 +373,9 @@ export default function GamePage() {
             </>
           ) : (
             <>
-              <p className="text-gray-300">Tie vote — imposter escaped!</p>
+              <p className={`text-2xl font-bold ${myRole?.isImposter && voteResult.imposterPlayerId === playerId ? 'text-amber-400' : 'text-gray-300'}`}>
+                {myRole?.isImposter && voteResult.imposterPlayerId === playerId ? 'You escaped! You win!' : 'Tie vote — imposter escaped!'}
+              </p>
               {voteResult.imposterPlayerId && (
                 <p className="text-gray-400 text-sm">
                   The imposter was <strong className="text-white">{game.players.find(p => p.id === voteResult.imposterPlayerId)?.username}</strong>.
