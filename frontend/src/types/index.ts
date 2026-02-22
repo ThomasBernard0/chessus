@@ -51,6 +51,7 @@ export interface VoteResult {
   isVotingComplete: boolean;
   eliminatedPlayerId: string | null;
   wasImposterFound: boolean | null;
+  imposterPlayerId: string | null;
 }
 
 export interface GameState {

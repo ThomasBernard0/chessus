@@ -8,7 +8,6 @@ import { useGameStore } from '../store/gameStore';
 import { Team } from '../types';
 import type { GameState, MoveResult, VoteResult, PointAward, LobbyDto } from '../types';
 
-const SEAT_LABEL = ['A1', 'B1', 'A2', 'B2'];
 
 // --- Captured pieces helpers ---
 const PIECE_VALUES: Record<string, number> = { p: 1, n: 3, b: 3, r: 5, q: 9 };
@@ -76,7 +75,7 @@ export default function GamePage() {
 
   const [chess] = useState(() => new Chess());
   const [phase, setPhase] = useState<'playing' | 'voting' | 'finished'>('playing');
-  const [winner, setWinner] = useState<Team | null>(null);
+  const [winner, setWinner] = useState<'White' | 'Black' | null>(null);
   const [selectedSuspect, setSelectedSuspect] = useState<string | null>(null);
   const [hasVoted, setHasVoted] = useState(false);
   const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
@@ -106,7 +105,7 @@ export default function GamePage() {
     });
 
     socket.on('game:votingStarted', ({ winner: w }: { winner: Team }) => {
-      setWinner(w);
+      setWinner(w === Team.A ? 'White' : 'Black');
       setPhase('voting');
     });
 
@@ -268,7 +267,7 @@ export default function GamePage() {
     <div className="min-h-screen bg-gray-950 text-white flex flex-col items-center justify-center gap-6 p-4">
       {myRole && (
         <div className={`px-4 py-2 rounded-full text-sm font-semibold ${myRole.isImposter ? 'bg-red-600' : 'bg-green-700'}`}>
-          {myRole.isImposter ? 'You are the IMPOSTER — make your team lose!' : `Team ${myRole.team} — Seat ${SEAT_LABEL[myRole.seatIndex]}`}
+          {myRole.isImposter ? 'You are the IMPOSTER — make your team lose!' : `You are a Loyalist — win as ${myRole.seatIndex % 2 === 0 ? 'White' : 'Black'}!`}
         </div>
       )}
 
@@ -315,7 +314,7 @@ export default function GamePage() {
       {phase === 'voting' && (
         <div className="bg-gray-900 rounded-2xl p-8 w-full max-w-sm flex flex-col gap-4 shadow-xl">
           <h2 className="text-2xl font-bold text-amber-400 text-center">Who is the Imposter?</h2>
-          {winner && <p className="text-center text-gray-400">Team <strong>{winner}</strong> won the chess match.</p>}
+          {winner && <p className="text-center text-gray-400"><strong>{winner}</strong> won the chess match.</p>}
 
           <div className="flex flex-col gap-2">
             {game.players.filter(p => p.id !== playerId).map(p => (
@@ -324,7 +323,7 @@ export default function GamePage() {
                 onClick={() => setSelectedSuspect(p.id)}
                 className={`rounded-lg px-4 py-3 text-left transition ${selectedSuspect === p.id ? 'bg-amber-400 text-gray-950' : 'bg-gray-800 hover:bg-gray-700'}`}
               >
-                {p.username} — Seat {SEAT_LABEL[p.seatIndex]}
+                {p.username}
               </button>
             ))}
           </div>
@@ -361,9 +360,21 @@ export default function GamePage() {
               <p className={`text-2xl font-bold ${voteResult.wasImposterFound ? 'text-green-400' : 'text-red-400'}`}>
                 {voteResult.wasImposterFound ? 'Imposter found!' : 'Wrong! The imposter escaped.'}
               </p>
+              {!voteResult.wasImposterFound && voteResult.imposterPlayerId && (
+                <p className="text-gray-400 text-sm">
+                  The imposter was <strong className="text-white">{game.players.find(p => p.id === voteResult.imposterPlayerId)?.username}</strong>.
+                </p>
+              )}
             </>
           ) : (
-            <p className="text-gray-300">Tie vote — imposter escaped!</p>
+            <>
+              <p className="text-gray-300">Tie vote — imposter escaped!</p>
+              {voteResult.imposterPlayerId && (
+                <p className="text-gray-400 text-sm">
+                  The imposter was <strong className="text-white">{game.players.find(p => p.id === voteResult.imposterPlayerId)?.username}</strong>.
+                </p>
+              )}
+            </>
           )}
 
           {pointsAwarded && pointsAwarded.length > 0 && (

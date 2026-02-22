@@ -20,6 +20,7 @@ export interface VoteResult {
   isVotingComplete: boolean;
   eliminatedPlayerId: string | null;
   wasImposterFound: boolean | null;
+  imposterPlayerId: string | null;
 }
 
 @Injectable()
@@ -119,6 +120,8 @@ export class GameService {
 
     let eliminatedPlayerId: string | null = null;
     let wasImposterFound: boolean | null = null;
+    const imposterPlayer = game.lobby.players.find(p => p.isImposter);
+    const imposterPlayerId: string | null = imposterPlayer?.id ?? null;
 
     if (isVotingComplete) {
       // Find the player with most votes
@@ -147,6 +150,7 @@ export class GameService {
       isVotingComplete,
       eliminatedPlayerId,
       wasImposterFound,
+      imposterPlayerId,
     };
   }
 
