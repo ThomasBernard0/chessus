@@ -11,7 +11,7 @@ import { LobbyService } from './lobby.service';
 import { Team, LobbyStatus } from '../shared/types';
 import type { LobbyDto } from '../shared/types';
 
-@WebSocketGateway({ cors: { origin: process.env.FRONTEND_URL || 'http://localhost:5173' } })
+@WebSocketGateway({ cors: { origin: process.env.FRONTEND_URL || true, credentials: true } })
 export class LobbyGateway implements OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;

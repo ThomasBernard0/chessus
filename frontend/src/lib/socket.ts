@@ -2,7 +2,7 @@ import { io, Socket } from 'socket.io-client';
 import { useGameStore } from '../store/gameStore';
 import type { LobbyDto } from '../types';
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
 const STORAGE_KEY = 'chessus_identity';
 
 let socket: Socket | null = null;

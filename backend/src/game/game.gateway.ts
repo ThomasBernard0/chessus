@@ -24,7 +24,7 @@ interface GameTimer {
 }
 
 @WebSocketGateway({
-  cors: { origin: process.env.FRONTEND_URL || 'http://localhost:5173' },
+  cors: { origin: process.env.FRONTEND_URL || true, credentials: true },
 })
 export class GameGateway {
   @WebSocketServer()
