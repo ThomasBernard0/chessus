@@ -6,13 +6,14 @@ function generateCode(): string {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
 }
 
-function toPlayerDto(p: { id: string; username: string; team: string | null; seatIndex: number | null; isHost: boolean }): PlayerDto {
+function toPlayerDto(p: { id: string; username: string; socketId: string | null; team: string | null; seatIndex: number | null; isHost: boolean }): PlayerDto {
   return {
     id: p.id,
     username: p.username,
     team: p.team as Team | null,
     seatIndex: p.seatIndex,
     isHost: p.isHost,
+    isOnline: p.socketId !== null,
   };
 }
 
@@ -138,6 +139,94 @@ export class LobbyService {
     });
 
     return this.toLobbyDto(updated!);
+  }
+
+  async markPlayerOffline(playerId: string): Promise<{ lobby: LobbyDto | null; newHostId: string | null }> {
+    const player = await this.prisma.player.findUnique({
+      where: { id: playerId },
+      include: { lobby: { select: { id: true, status: true } } },
+    });
+    if (!player?.lobbyId) return { lobby: null, newHostId: null };
+
+    await this.prisma.player.update({
+      where: { id: playerId },
+      data: { socketId: null },
+    });
+
+    const lobby = await this.prisma.lobby.findUnique({
+      where: { id: player.lobbyId },
+      include: { players: true },
+    });
+    if (!lobby) return { lobby: null, newHostId: null };
+
+    let newHostId: string | null = null;
+    if (player.isHost && player.lobby?.status === LobbyStatus.WAITING) {
+      const nextOnline = lobby.players.find(p => p.id !== playerId && p.socketId !== null);
+      if (nextOnline) {
+        await this.prisma.player.update({ where: { id: nextOnline.id }, data: { isHost: true } });
+        await this.prisma.player.update({ where: { id: playerId }, data: { isHost: false } });
+        await this.prisma.lobby.update({ where: { id: lobby.id }, data: { hostId: nextOnline.id } });
+        newHostId = nextOnline.id;
+        const refreshed = await this.prisma.lobby.findUnique({
+          where: { id: lobby.id },
+          include: { players: true },
+        });
+        return { lobby: this.toLobbyDto(refreshed!), newHostId };
+      }
+    }
+
+    return { lobby: this.toLobbyDto(lobby), newHostId };
+  }
+
+  async reconnectPlayer(playerId: string, newSocketId: string): Promise<{
+    player: {
+      id: string;
+      lobbyId: string | null;
+      lobby: { id: string; code: string; status: string; gameId: string | null } | null;
+    };
+  } | null> {
+    const player = await this.prisma.player.findUnique({
+      where: { id: playerId },
+      include: { lobby: true },
+    });
+    if (!player) return null;
+
+    await this.prisma.player.update({
+      where: { id: playerId },
+      data: { socketId: newSocketId },
+    });
+
+    let gameId: string | null = null;
+    if (player.lobbyId) {
+      const game = await this.prisma.game.findFirst({
+        where: { lobbyId: player.lobbyId },
+        select: { id: true },
+      });
+      gameId = game?.id ?? null;
+    }
+
+    return {
+      player: {
+        id: player.id,
+        lobbyId: player.lobbyId,
+        lobby: player.lobby
+          ? {
+              id: player.lobby.id,
+              code: player.lobby.code,
+              status: player.lobby.status,
+              gameId,
+            }
+          : null,
+      },
+    };
+  }
+
+  async getLobbyById(lobbyId: string): Promise<LobbyDto | null> {
+    const lobby = await this.prisma.lobby.findUnique({
+      where: { id: lobbyId },
+      include: { players: true },
+    });
+    return lobby ? this.toLobbyDto(lobby) : null;
   }
 
   async getPlayerLobbyId(playerId: string): Promise<string | null> {

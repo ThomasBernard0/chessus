@@ -14,6 +14,9 @@ interface GameStore {
   myRole: MyRole | null;
   voteResult: VoteResult | null;
 
+  // Reconnect navigation
+  pendingGameId: string | null;
+
   // Actions
   setIdentity: (playerId: string, username: string) => void;
   setLobby: (lobby: LobbyDto | null) => void;
@@ -21,6 +24,7 @@ interface GameStore {
   setMyRole: (role: MyRole) => void;
   updateFen: (fen: string, activeSeatIndex: number, moveCount: number) => void;
   setVoteResult: (result: VoteResult) => void;
+  setPendingGameId: (gameId: string | null) => void;
   reset: () => void;
 }
 
@@ -31,15 +35,17 @@ export const useGameStore = create<GameStore>((set) => ({
   game: null,
   myRole: null,
   voteResult: null,
+  pendingGameId: null,
 
   setIdentity: (playerId, username) => set({ playerId, username }),
   setLobby: (lobby) => set({ lobby }),
   setGame: (game) => set({ game }),
   setMyRole: (myRole) => set({ myRole }),
-  updateFen: (fen, activeSeatIndex, currentTurn) =>
+  updateFen: (fen, activeSeatIndex, _currentTurn) =>
     set((state) => ({
       game: state.game ? { ...state.game, fen, activeSeatIndex } : null,
     })),
   setVoteResult: (voteResult) => set({ voteResult }),
-  reset: () => set({ lobby: null, game: null, myRole: null, voteResult: null }),
+  setPendingGameId: (pendingGameId) => set({ pendingGameId }),
+  reset: () => set({ lobby: null, game: null, myRole: null, voteResult: null, pendingGameId: null }),
 }));

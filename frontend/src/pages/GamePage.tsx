@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Chessboard } from 'react-chessboard';
 import { Chess } from 'chess.js';
 import type { Square } from 'chess.js';
-import { getSocket } from '../lib/socket';
+import { getSocket, clearIdentity } from '../lib/socket';
 import { useGameStore } from '../store/gameStore';
 import { Team } from '../types';
 import type { GameState, MoveResult, VoteResult } from '../types';
@@ -278,7 +278,7 @@ export default function GamePage() {
           ) : (
             <p className="text-gray-300">Tie vote — imposter escaped!</p>
           )}
-          <button onClick={() => { reset(); navigate('/'); }} className="bg-amber-400 hover:bg-amber-300 text-gray-950 font-semibold rounded-lg py-3 transition">
+          <button onClick={() => { clearIdentity(); reset(); navigate('/'); }} className="bg-amber-400 hover:bg-amber-300 text-gray-950 font-semibold rounded-lg py-3 transition">
             Back to Home
           </button>
         </div>

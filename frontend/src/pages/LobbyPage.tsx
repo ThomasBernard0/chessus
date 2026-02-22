@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { getSocket } from '../lib/socket';
+import { getSocket, clearIdentity } from '../lib/socket';
 import { useGameStore } from '../store/gameStore';
 import { Team } from '../types';
 import type { LobbyDto } from '../types';
@@ -47,9 +47,11 @@ export default function LobbyPage() {
 
   const isHost = lobby.hostId === playerId;
   const myPlayer = lobby.players.find(p => p.id === playerId);
+  const allOnline = lobby.players.every(p => p.isOnline);
   const canStart = isHost && lobby.players.length === 4 &&
     lobby.players.filter(p => p.team === Team.A).length === 2 &&
-    lobby.players.filter(p => p.team === Team.B).length === 2;
+    lobby.players.filter(p => p.team === Team.B).length === 2 &&
+    allOnline;
 
   function handleChangeTeam(team: Team) {
     getSocket().emit('lobby:changeTeam', { team });
@@ -67,6 +69,7 @@ export default function LobbyPage() {
   }
 
   function handleLeave() {
+    clearIdentity();
     getSocket().emit('lobby:leave');
     setLobby(null);
     navigate('/');
@@ -94,6 +97,7 @@ export default function LobbyPage() {
                   <div key={p.id} className={`flex items-center justify-between rounded-lg px-4 py-2 ${TEAM_COLOR[team]}`}>
                     <span className="font-medium">
                       {p.username}
+                      {!p.isOnline && <span className="ml-2 text-xs text-gray-500">(offline)</span>}
                       {p.isHost && <span className="ml-2 text-xs text-amber-500">(host)</span>}
                       {p.id === playerId && <span className="ml-2 text-xs text-green-400">(you)</span>}
                     </span>
@@ -151,7 +155,7 @@ export default function LobbyPage() {
               disabled={!canStart}
               className="bg-amber-400 hover:bg-amber-300 text-gray-950 font-semibold rounded-lg py-3 transition disabled:opacity-40 mt-2"
             >
-              {canStart ? 'Start Game' : 'Need 2 players on each team'}
+              {canStart ? 'Start Game' : !allOnline ? 'Waiting for players to reconnect' : 'Need 2 players on each team'}
             </button>
             {startError && <p className="text-red-400 text-sm text-center">{startError}</p>}
           </>

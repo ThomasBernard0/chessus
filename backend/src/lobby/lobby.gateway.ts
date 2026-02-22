@@ -8,7 +8,8 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { LobbyService } from './lobby.service';
-import { Team } from '../shared/types';
+import { Team, LobbyStatus } from '../shared/types';
+import type { LobbyDto } from '../shared/types';
 
 @WebSocketGateway({ cors: { origin: process.env.FRONTEND_URL || 'http://localhost:5173' } })
 export class LobbyGateway implements OnGatewayDisconnect {
@@ -25,11 +26,40 @@ export class LobbyGateway implements OnGatewayDisconnect {
     if (!playerId) return;
     this.socketToPlayer.delete(client.id);
 
-    const { lobby, newHostId } = await this.lobbyService.leaveLobby(playerId);
+    const { lobby, newHostId } = await this.lobbyService.markPlayerOffline(playerId);
     if (!lobby) return;
 
     this.server.to(lobby.id).emit('lobby:updated', lobby);
     if (newHostId) this.server.to(lobby.id).emit('lobby:newHost', { newHostId });
+  }
+
+  @SubscribeMessage('socket:identify')
+  async handleIdentify(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { playerId: string },
+  ): Promise<{ ok: boolean; lobby?: LobbyDto; gameId?: string; error?: string }> {
+    const result = await this.lobbyService.reconnectPlayer(data.playerId, client.id);
+    if (!result) return { ok: false, error: 'Player not found' };
+
+    this.socketToPlayer.set(client.id, data.playerId);
+
+    const { lobby } = result.player;
+    if (!lobby) return { ok: true };
+
+    if (lobby.status === LobbyStatus.WAITING) {
+      client.join(lobby.id);
+      const lobbyDto = await this.lobbyService.getLobbyById(lobby.id);
+      if (!lobbyDto) return { ok: false, error: 'Lobby not found' };
+      this.server.to(lobby.id).emit('lobby:updated', lobbyDto);
+      return { ok: true, lobby: lobbyDto };
+    }
+
+    if (lobby.status === LobbyStatus.IN_PROGRESS && lobby.gameId) {
+      client.join(lobby.gameId);
+      return { ok: true, gameId: lobby.gameId };
+    }
+
+    return { ok: true };
   }
 
   @SubscribeMessage('lobby:create')

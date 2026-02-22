@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { connectSocket } from '../lib/socket';
+import { connectSocket, saveIdentity } from '../lib/socket';
 import { useGameStore } from '../store/gameStore';
 import type { LobbyDto } from '../types';
 
@@ -27,6 +27,7 @@ export default function HomePage() {
 
     socket.emit('lobby:create', { username }, (res: { lobby: LobbyDto; playerId: string }) => {
       setLoading(false);
+      saveIdentity(res.playerId, username);
       setIdentity(res.playerId, username);
       setLobby(res.lobby);
       navigate(`/lobby/${res.lobby.code}`);
@@ -41,6 +42,7 @@ export default function HomePage() {
     socket.emit('lobby:join', { code: joinCode.toUpperCase(), username }, (res: { lobby: LobbyDto; playerId: string } | { error: string }) => {
       setLoading(false);
       if ('error' in res) { setError(res.error); return; }
+      saveIdentity(res.playerId, username);
       setIdentity(res.playerId, username);
       setLobby(res.lobby);
       navigate(`/lobby/${res.lobby.code}`);

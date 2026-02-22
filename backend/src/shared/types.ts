@@ -34,6 +34,7 @@ export interface PlayerDto {
   team: Team | null;
   seatIndex: number | null;
   isHost: boolean;
+  isOnline: boolean;
 }
 
 export interface LobbyDto {
