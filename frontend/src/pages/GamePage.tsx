@@ -9,6 +9,14 @@ import { Team } from '../types';
 import type { GameState, MoveResult, VoteResult, PointAward, LobbyDto } from '../types';
 
 
+// --- Timer helpers ---
+function formatTime(ms: number): string {
+  const totalSeconds = Math.ceil(ms / 1000);
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
 // --- Captured pieces helpers ---
 const PIECE_VALUES: Record<string, number> = { p: 1, n: 3, b: 3, r: 5, q: 9 };
 const STARTING_COUNT: Record<string, number> = { p: 8, n: 2, b: 2, r: 2, q: 1 };
@@ -71,7 +79,7 @@ function CapturedPiecesRow({
 export default function GamePage() {
   const { gameId } = useParams<{ gameId: string }>();
   const navigate = useNavigate();
-  const { game, myRole, playerId, setGame, updateFen, setVoteResult, setPointsAwarded, setMyRole, voteResult, pointsAwarded, reset, setLobby } = useGameStore();
+  const { game, myRole, playerId, setGame, updateFen, updateTimer, setVoteResult, setPointsAwarded, setMyRole, voteResult, pointsAwarded, reset, setLobby } = useGameStore();
 
   const [chess] = useState(() => new Chess());
   const [phase, setPhase] = useState<'playing' | 'voting' | 'finished'>('playing');
@@ -99,10 +107,12 @@ export default function GamePage() {
 
     socket.on('game:moved', (result: MoveResult) => {
       chess.load(result.fen);
-      updateFen(result.fen, result.currentTurn % 4, result.currentTurn);
+      updateFen(result.fen, result.currentTurn % 4, result.currentTurn, result.timer);
       setSelectedSquare(null);
       setValidMoveSquares([]);
     });
+
+    socket.on('game:timerUpdate', updateTimer);
 
     socket.on('game:votingStarted', ({ winner: w }: { winner: Team }) => {
       setWinner(w === Team.A ? 'White' : 'Black');
@@ -133,6 +143,7 @@ export default function GamePage() {
       socket.off('game:voteUpdate');
       socket.off('game:finished');
       socket.off('lobby:returnedToLobby');
+      socket.off('game:timerUpdate');
     };
   }, []);
 
@@ -286,8 +297,29 @@ export default function GamePage() {
               const isBlack = myRole != null && myRole.seatIndex % 2 === 1;
               const whiteRow = <CapturedPiecesRow captured={capturedByWhite} pieceColor="b" advantage={advantage > 0 ? advantage : 0} />;
               const blackRow = <CapturedPiecesRow captured={capturedByBlack} pieceColor="w" advantage={advantage < 0 ? -advantage : 0} />;
+
+              // Clocks: opponent's at top, ours at bottom (matches board orientation)
+              const timer = game.timer;
+              const myTeam = myRole?.seatIndex !== undefined ? (myRole.seatIndex % 2 === 0 ? 'A' : 'B') : null;
+              const myMs = myTeam === 'A' ? (timer?.teamAMs ?? null) : (timer?.teamBMs ?? null);
+              const oppMs = myTeam === 'A' ? (timer?.teamBMs ?? null) : (timer?.teamAMs ?? null);
+              const myTeamActive = timer?.activeTeam === (myTeam === 'A' ? 'A' : 'B');
+
+              function Clock({ ms, active, label }: { ms: number | null; active: boolean; label: string }) {
+                const low = ms !== null && ms < 30_000;
+                return (
+                  <div className={`flex items-center justify-between px-3 py-1.5 rounded-lg ${active ? 'bg-gray-700' : 'bg-gray-800'}`}>
+                    <span className="text-xs text-gray-400">{label}</span>
+                    <span className={`font-mono font-bold text-lg tabular-nums ${low ? 'text-red-400' : active ? 'text-white' : 'text-gray-400'}`}>
+                      {ms !== null ? formatTime(ms) : '--:--'}
+                    </span>
+                  </div>
+                );
+              }
+
               return (
                 <>
+                  <Clock ms={oppMs} active={!myTeamActive} label={isBlack ? 'White' : 'Black'} />
                   {isBlack ? whiteRow : blackRow}
                   <Chessboard
                     options={{
@@ -300,6 +332,7 @@ export default function GamePage() {
                     }}
                   />
                   {isBlack ? blackRow : whiteRow}
+                  <Clock ms={myMs} active={myTeamActive} label={isBlack ? 'Black' : 'White'} />
                 </>
               );
             })()}

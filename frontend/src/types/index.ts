@@ -43,6 +43,7 @@ export interface MoveResult {
   activePlayerId: string;
   isGameOver: boolean;
   winner: Team | null;
+  timer: TimerState | null;
 }
 
 export interface VoteResult {
@@ -54,12 +55,19 @@ export interface VoteResult {
   imposterPlayerId: string | null;
 }
 
+export interface TimerState {
+  teamAMs: number;
+  teamBMs: number;
+  activeTeam: Team;
+}
+
 export interface GameState {
   gameId: string;
   fen: string;
   moves: { from: string; to: string; san: string }[];
   activeSeatIndex: number;
   players: { id: string; username: string; team: Team; seatIndex: number }[];
+  timer: TimerState | null;
 }
 
 export interface MyRole {

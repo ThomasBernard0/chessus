@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { LobbyDto, GameState, MyRole, VoteResult, PointAward } from '../types';
+import type { LobbyDto, GameState, MyRole, VoteResult, PointAward, TimerState } from '../types';
 
 interface GameStore {
   // Identity
@@ -23,7 +23,8 @@ interface GameStore {
   setLobby: (lobby: LobbyDto | null) => void;
   setGame: (game: GameState | null) => void;
   setMyRole: (role: MyRole) => void;
-  updateFen: (fen: string, activeSeatIndex: number, moveCount: number) => void;
+  updateFen: (fen: string, activeSeatIndex: number, moveCount: number, timer?: TimerState | null) => void;
+  updateTimer: (timer: TimerState) => void;
   setVoteResult: (result: VoteResult) => void;
   setPointsAwarded: (awards: PointAward[]) => void;
   setPendingGameId: (gameId: string | null) => void;
@@ -44,9 +45,13 @@ export const useGameStore = create<GameStore>((set) => ({
   setLobby: (lobby) => set({ lobby }),
   setGame: (game) => set({ game }),
   setMyRole: (myRole) => set({ myRole }),
-  updateFen: (fen, activeSeatIndex, _currentTurn) =>
+  updateFen: (fen, activeSeatIndex, _currentTurn, timer) =>
     set((state) => ({
-      game: state.game ? { ...state.game, fen, activeSeatIndex } : null,
+      game: state.game ? { ...state.game, fen, activeSeatIndex, ...(timer !== undefined ? { timer } : {}) } : null,
+    })),
+  updateTimer: (timer) =>
+    set((state) => ({
+      game: state.game ? { ...state.game, timer } : null,
     })),
   setVoteResult: (voteResult) => set({ voteResult }),
   setPointsAwarded: (pointsAwarded) => set({ pointsAwarded }),
