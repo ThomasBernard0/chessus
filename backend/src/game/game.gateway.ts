@@ -150,6 +150,37 @@ export class GameGateway {
     return result;
   }
 
+  @SubscribeMessage('game:returnToLobby')
+  async handleReturnToLobby(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { gameId: string },
+  ) {
+    let lobbyId: string | null = null;
+
+    try {
+      const game = await this.gameService.getGameState(data.gameId);
+      lobbyId = game.lobbyId;
+    } catch {
+      // Game already cleaned up — look up lobby via player
+      const playerId = this.lobbyGateway.getSocketToPlayer().get(client.id);
+      if (playerId) lobbyId = await this.lobbyService.getPlayerLobbyId(playerId);
+    }
+
+    if (!lobbyId) return { error: 'Cannot determine lobby' };
+
+    const lobby = await this.lobbyService.resetAfterGame(lobbyId);
+    if (!lobby) return { error: 'Lobby not found' };
+
+    // Move all sockets from the game room into the lobby room
+    const roomSockets = await this.server.in(data.gameId).fetchSockets();
+    for (const s of roomSockets) {
+      s.join(lobbyId);
+      s.leave(data.gameId);
+    }
+
+    this.server.to(lobbyId).emit('lobby:returnedToLobby', { lobby });
+  }
+
   @SubscribeMessage('game:endGame')
   async handleEndGame(
     @ConnectedSocket() _client: Socket,

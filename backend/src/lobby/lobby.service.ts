@@ -24,6 +24,9 @@ export class LobbyService {
   async createLobby(username: string, socketId: string): Promise<{ lobby: LobbyDto; playerId: string }> {
     const code = generateCode();
 
+    // Clear stale socketId from any existing player to avoid unique constraint violation
+    await this.prisma.player.updateMany({ where: { socketId }, data: { socketId: null } });
+
     const player = await this.prisma.player.create({
       data: { username, socketId, isHost: true, team: Team.A, seatIndex: 0 },
     });
@@ -49,6 +52,9 @@ export class LobbyService {
     if (!lobby) throw new NotFoundException('Lobby not found');
     if (lobby.status !== LobbyStatus.WAITING) throw new BadRequestException('Lobby already started');
     if (lobby.players.length >= 4) throw new BadRequestException('Lobby is full');
+
+    // Clear stale socketId from any existing player to avoid unique constraint violation
+    await this.prisma.player.updateMany({ where: { socketId }, data: { socketId: null } });
 
     const player = await this.prisma.player.create({
       data: { username, socketId, lobbyId: lobby.id },
@@ -219,6 +225,21 @@ export class LobbyService {
           : null,
       },
     };
+  }
+
+  async resetAfterGame(lobbyId: string): Promise<LobbyDto | null> {
+    const game = await this.prisma.game.findUnique({ where: { lobbyId } });
+    if (game) {
+      await this.prisma.vote.deleteMany({ where: { gameId: game.id } });
+      await this.prisma.move.deleteMany({ where: { gameId: game.id } });
+      await this.prisma.game.delete({ where: { id: game.id } });
+    }
+
+    await this.prisma.lobby.update({ where: { id: lobbyId }, data: { status: LobbyStatus.WAITING } });
+    await this.prisma.player.updateMany({ where: { lobbyId }, data: { seatIndex: null, isImposter: false } });
+
+    const refreshed = await this.prisma.lobby.findUnique({ where: { id: lobbyId }, include: { players: true } });
+    return refreshed ? this.toLobbyDto(refreshed) : null;
   }
 
   async getLobbyById(lobbyId: string): Promise<LobbyDto | null> {

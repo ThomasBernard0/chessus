@@ -6,14 +6,73 @@ import type { Square } from 'chess.js';
 import { getSocket, clearIdentity } from '../lib/socket';
 import { useGameStore } from '../store/gameStore';
 import { Team } from '../types';
-import type { GameState, MoveResult, VoteResult } from '../types';
+import type { GameState, MoveResult, VoteResult, LobbyDto } from '../types';
 
 const SEAT_LABEL = ['A1', 'B1', 'A2', 'B2'];
+
+// --- Captured pieces helpers ---
+const PIECE_VALUES: Record<string, number> = { p: 1, n: 3, b: 3, r: 5, q: 9 };
+const STARTING_COUNT: Record<string, number> = { p: 8, n: 2, b: 2, r: 2, q: 1 };
+const DISPLAY_ORDER = ['q', 'r', 'b', 'n', 'p'] as const;
+// Single symbol set — differentiate color via CSS to avoid ♟ rendering inconsistencies across fonts
+const PIECE_SYMBOLS: Record<string, string> = { p: '♙', n: '♘', b: '♗', r: '♖', q: '♕' };
+
+function computeCaptures(fen: string) {
+  const boardPart = fen.split(' ')[0];
+  const count: Record<string, number> = {};
+  for (const ch of boardPart) {
+    if ('pnbrqkPNBRQK'.includes(ch)) count[ch] = (count[ch] ?? 0) + 1;
+  }
+  const capturedByWhite: Record<string, number> = {};
+  const capturedByBlack: Record<string, number> = {};
+  let advantage = 0;
+  for (const [piece, start] of Object.entries(STARTING_COUNT)) {
+    const bCaptured = start - (count[piece] ?? 0);
+    const wCaptured = start - (count[piece.toUpperCase()] ?? 0);
+    if (bCaptured > 0) capturedByWhite[piece] = bCaptured;
+    if (wCaptured > 0) capturedByBlack[piece] = wCaptured;
+    advantage += bCaptured * PIECE_VALUES[piece];
+    advantage -= wCaptured * PIECE_VALUES[piece];
+  }
+  return { capturedByWhite, capturedByBlack, advantage };
+}
+
+function CapturedPiecesRow({
+  captured, pieceColor, advantage,
+}: {
+  captured: Record<string, number>;
+  pieceColor: 'w' | 'b';
+  advantage: number;
+}) {
+  // White pieces: pure white + dark shadow. Black pieces: dark fill + white glow for visibility on dark bg.
+  const style = pieceColor === 'w'
+    ? { color: '#ffffff', textShadow: '0 0 2px rgba(0,0,0,0.9), 0 1px 3px rgba(0,0,0,0.6)', letterSpacing: '-0.05em' }
+    : { color: '#111111', textShadow: '0 0 1px rgba(255,255,255,0.9), 0 0 4px rgba(255,255,255,0.7)', letterSpacing: '-0.05em' };
+
+  const groups = DISPLAY_ORDER.filter(p => (captured[p] ?? 0) > 0);
+
+  return (
+    <div className="flex items-center gap-1.5 min-h-[1.5rem]">
+      {groups.map(p => (
+        <div key={p} className="flex items-center">
+          {Array.from({ length: captured[p] }).map((_, i) => (
+            <span key={i} className="text-lg leading-none" style={{ ...style, marginLeft: i === 0 ? 0 : '-0.35em' }}>
+              {PIECE_SYMBOLS[p]}
+            </span>
+          ))}
+        </div>
+      ))}
+      {advantage > 0 && (
+        <span className="text-xs text-gray-400 font-semibold ml-1">+{advantage}</span>
+      )}
+    </div>
+  );
+}
 
 export default function GamePage() {
   const { gameId } = useParams<{ gameId: string }>();
   const navigate = useNavigate();
-  const { game, myRole, playerId, setGame, updateFen, setVoteResult, setMyRole, voteResult, reset } = useGameStore();
+  const { game, myRole, playerId, setGame, updateFen, setVoteResult, setMyRole, voteResult, reset, setLobby } = useGameStore();
 
   const [chess] = useState(() => new Chess());
   const [phase, setPhase] = useState<'playing' | 'voting' | 'finished'>('playing');
@@ -58,6 +117,12 @@ export default function GamePage() {
       setPhase('finished');
     });
 
+    socket.on('lobby:returnedToLobby', ({ lobby }: { lobby: LobbyDto }) => {
+      reset();
+      setLobby(lobby);
+      navigate(`/lobby/${lobby.code}`);
+    });
+
     return () => {
       socket.off('game:yourRole');
       socket.off('game:state');
@@ -65,6 +130,7 @@ export default function GamePage() {
       socket.off('game:votingStarted');
       socket.off('game:voteUpdate');
       socket.off('game:finished');
+      socket.off('lobby:returnedToLobby');
     };
   }, []);
 
@@ -161,8 +227,10 @@ export default function GamePage() {
     getSocket().emit('game:vote', { gameId, suspectId: selectedSuspect });
   }
 
-  function endGame(w: Team) {
-    getSocket().emit('game:endGame', { gameId, winner: w });
+  function handleLeaveGame() {
+    clearIdentity();
+    reset();
+    navigate('/');
   }
 
   if (!game) return (
@@ -171,7 +239,6 @@ export default function GamePage() {
     </div>
   );
 
-  const activeSeatLabel = SEAT_LABEL[game.activeSeatIndex] ?? '?';
   const activePlayer = game.players.find(p => p.seatIndex === game.activeSeatIndex);
   const isMyTurn = activePlayer?.id === playerId;
 
@@ -203,29 +270,39 @@ export default function GamePage() {
         <>
           <div className="text-center">
             <p className="text-gray-400 text-sm">
-              Turn: <span className="text-white font-semibold">{activeSeatLabel}</span>
+              Turn: <span className="text-white font-semibold">{activePlayer?.username ?? '?'}</span>
               {isMyTurn && <span className="ml-2 text-amber-400 font-bold">— Your move!</span>}
             </p>
           </div>
 
-          <div className="w-full max-w-[min(80vh,600px)]">
-            <Chessboard
-              options={{
-                position: game.fen,
-                onPieceDrop: onDrop,
-                onSquareClick,
-                allowDragging: isMyTurn,
-                boardOrientation: myRole?.team === Team.B ? 'black' : 'white',
-                squareStyles,
-              }}
-            />
+          <div className="w-full max-w-[min(80vh,600px)] flex flex-col gap-1">
+            {(() => {
+              const { capturedByWhite, capturedByBlack, advantage } = computeCaptures(game.fen);
+              const isBlack = myRole?.team === Team.B;
+              const whiteRow = <CapturedPiecesRow captured={capturedByWhite} pieceColor="b" advantage={advantage > 0 ? advantage : 0} />;
+              const blackRow = <CapturedPiecesRow captured={capturedByBlack} pieceColor="w" advantage={advantage < 0 ? -advantage : 0} />;
+              return (
+                <>
+                  {isBlack ? whiteRow : blackRow}
+                  <Chessboard
+                    options={{
+                      position: game.fen,
+                      onPieceDrop: onDrop,
+                      onSquareClick,
+                      allowDragging: isMyTurn,
+                      boardOrientation: isBlack ? 'black' : 'white',
+                      squareStyles,
+                    }}
+                  />
+                  {isBlack ? blackRow : whiteRow}
+                </>
+              );
+            })()}
           </div>
 
-          {/* Dev helper — end game manually */}
-          <div className="flex gap-2 text-xs text-gray-600">
-            <button onClick={() => endGame(Team.A)} className="underline hover:text-gray-400">Force A wins</button>
-            <button onClick={() => endGame(Team.B)} className="underline hover:text-gray-400">Force B wins</button>
-          </div>
+          <button onClick={handleLeaveGame} className="text-gray-500 hover:text-gray-300 text-sm transition">
+            Leave game
+          </button>
         </>
       )}
 
@@ -259,6 +336,10 @@ export default function GamePage() {
               {voteResult.votes.length}/{voteResult.totalPlayers} votes cast
             </p>
           )}
+
+          <button onClick={handleLeaveGame} className="text-gray-500 hover:text-gray-300 text-sm transition">
+            Leave game
+          </button>
         </div>
       )}
 
@@ -278,8 +359,8 @@ export default function GamePage() {
           ) : (
             <p className="text-gray-300">Tie vote — imposter escaped!</p>
           )}
-          <button onClick={() => { clearIdentity(); reset(); navigate('/'); }} className="bg-amber-400 hover:bg-amber-300 text-gray-950 font-semibold rounded-lg py-3 transition">
-            Back to Home
+          <button onClick={() => getSocket().emit('game:returnToLobby', { gameId })} className="bg-amber-400 hover:bg-amber-300 text-gray-950 font-semibold rounded-lg py-3 transition">
+            Return to Lobby
           </button>
         </div>
       )}
